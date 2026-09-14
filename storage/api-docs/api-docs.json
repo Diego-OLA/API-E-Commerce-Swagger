@@ -1,0 +1,792 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "API E-Commerce",
+        "description": "Documentación de los endpoints del E-Commerce",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8000/api",
+            "description": "Servidor Local"
+        }
+    ],
+    "paths": {
+        "/orders": {
+            "get": {
+                "tags": [
+                    "Órdenes"
+                ],
+                "summary": "Obtener órdenes del usuario autenticado",
+                "description": "Devuelve una lista paginada de las órdenes pertenecientes al usuario autenticado, incluyendo sus ítems y pagos.",
+                "operationId": "getUserOrders",
+                "responses": {
+                    "200": {
+                        "description": "Lista paginada de órdenes",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Order"
+                                            }
+                                        },
+                                        "current_page": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "per_page": {
+                                            "type": "integer",
+                                            "example": 15
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "example": 3
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Órdenes"
+                ],
+                "summary": "Crear una nueva orden",
+                "description": "Crea una orden con sus ítems, verifica el stock disponible de los productos y descuenta las existencias dentro de una transacción.",
+                "operationId": "storeOrder",
+                "requestBody": {
+                    "description": "Lista de productos y cantidades a pedir",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "product_id",
+                                                "quantity"
+                                            ],
+                                            "properties": {
+                                                "product_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "quantity": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Orden creada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Order"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "422": {
+                        "description": "Error de validación (ej. Stock insuficiente o producto inactivo)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Stock insuficiente para Camiseta Deportiva."
+                                        },
+                                        "errors": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "Stock insuficiente para Camiseta Deportiva."
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/orders/{order}": {
+            "get": {
+                "tags": [
+                    "Órdenes"
+                ],
+                "summary": "Obtener detalle de una orden",
+                "description": "Muestra la información de una orden específica si pertenece al usuario autenticado.",
+                "operationId": "getOrderById",
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "description": "ID de la orden",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Detalle de la orden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Order"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Acceso no autorizado a la orden"
+                    },
+                    "404": {
+                        "description": "Orden no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/orders/{order}/payments": {
+            "post": {
+                "tags": [
+                    "Pagos"
+                ],
+                "summary": "Procesar un pago con Stripe para una orden",
+                "description": "Crea un PaymentIntent en Stripe, ejecuta el cobro y registra la transacción localmente.",
+                "operationId": "storePayment",
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "description": "ID de la orden a pagar",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "Datos requeridos para procesar el pago",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "payment_method_id"
+                                ],
+                                "properties": {
+                                    "payment_method_id": {
+                                        "description": "ID del método de pago generado por Stripe (ej. pm_card_visa en testing)",
+                                        "type": "string",
+                                        "example": "pm_card_visa"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Pago procesado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "payment": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "order_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "provider": {
+                                                    "type": "string",
+                                                    "example": "stripe"
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "succeeded"
+                                                },
+                                                "amount": {
+                                                    "type": "integer",
+                                                    "example": 2000
+                                                },
+                                                "currency": {
+                                                    "type": "string",
+                                                    "example": "usd"
+                                                },
+                                                "stripe_payment_intent_id": {
+                                                    "type": "string",
+                                                    "example": "pi_3MtwBwLkd901xA0Z12345678"
+                                                },
+                                                "paid_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-09-13T20:00:00.000000Z"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "client_secret": {
+                                            "type": "string",
+                                            "example": "pi_3MtwBwLkd901xA0Z12345678_secret_ABC123"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "No autorizado (La orden no pertenece al usuario autenticado)"
+                    },
+                    "422": {
+                        "description": "Error de validación en la solicitud (Falta payment_method_id)"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/products": {
+            "get": {
+                "tags": [
+                    "Productos"
+                ],
+                "summary": "Obtener lista de productos activos",
+                "description": "Retorna una lista paginada de todos los productos cuyo estado es activo.",
+                "operationId": "index",
+                "responses": {
+                    "200": {
+                        "description": "Lista paginada de productos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Product"
+                                            }
+                                        },
+                                        "current_page": {
+                                            "type": "integer",
+                                            "example": 1
+                                        },
+                                        "per_page": {
+                                            "type": "integer",
+                                            "example": 15
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "example": 45
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Productos"
+                ],
+                "summary": "Crear un nuevo producto",
+                "description": "Almacena un nuevo registro de producto en la base de datos.",
+                "operationId": "storeProduct",
+                "requestBody": {
+                    "description": "Datos requeridos para crear el producto",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "price"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Camiseta Deportiva"
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 25.99
+                                    },
+                                    "stock": {
+                                        "type": "integer",
+                                        "example": 50
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Producto creado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Product"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "422": {
+                        "description": "Error de validación de datos"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/products/{product}": {
+            "get": {
+                "tags": [
+                    "Productos"
+                ],
+                "summary": "Obtener detalles de un producto",
+                "description": "Retorna la información detallada de un producto específico por su ID.",
+                "operationId": "getProductById",
+                "parameters": [
+                    {
+                        "name": "product",
+                        "in": "path",
+                        "description": "ID del producto",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Detalles del producto",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Product"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Productos"
+                ],
+                "summary": "Actualizar un producto existente",
+                "description": "Actualiza los campos de un producto específico en la base de datos.",
+                "operationId": "updateProduct",
+                "parameters": [
+                    {
+                        "name": "product",
+                        "in": "path",
+                        "description": "ID del producto a actualizar",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "Datos del producto a actualizar",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Camiseta Deportiva Pro"
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 29.99
+                                    },
+                                    "stock": {
+                                        "type": "integer",
+                                        "example": 40
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Producto actualizado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Product"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación de datos"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Productos"
+                ],
+                "summary": "Eliminar un producto",
+                "description": "Elimina físicamente o deshabilita un producto por su ID.",
+                "operationId": "destroyProduct",
+                "parameters": [
+                    {
+                        "name": "product",
+                        "in": "path",
+                        "description": "ID del producto a eliminar",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Producto eliminado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Producto eliminado"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Order": {
+                "title": "Order",
+                "description": "Modelo de Orden de compra",
+                "required": [
+                    "user_id",
+                    "status",
+                    "subtotal",
+                    "total",
+                    "currency"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "user_id": {
+                        "type": "integer",
+                        "example": 5
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "pending",
+                        "enum": [
+                            "pending",
+                            "paid",
+                            "cancelled",
+                            "completed"
+                        ]
+                    },
+                    "subtotal": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 49.98
+                    },
+                    "total": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 49.98
+                    },
+                    "currency": {
+                        "type": "string",
+                        "example": "USD"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    }
+                },
+                "type": "object"
+            },
+            "Payment": {
+                "title": "Payment",
+                "description": "Modelo de Pago procesado",
+                "required": [
+                    "order_id",
+                    "provider",
+                    "status",
+                    "amount",
+                    "currency"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "order_id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "provider": {
+                        "type": "string",
+                        "example": "stripe"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "succeeded"
+                    },
+                    "amount": {
+                        "description": "Monto en centavos",
+                        "type": "integer",
+                        "example": 2500
+                    },
+                    "currency": {
+                        "type": "string",
+                        "example": "usd"
+                    },
+                    "stripe_payment_intent_id": {
+                        "type": "string",
+                        "example": "pi_3MtwBwLkd901xA0Z12345678",
+                        "nullable": true
+                    },
+                    "stripe_charge_id": {
+                        "type": "string",
+                        "example": "ch_3MtwBwLkd901xA0Z12345678",
+                        "nullable": true
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "paid_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    }
+                },
+                "type": "object"
+            },
+            "Product": {
+                "title": "Product",
+                "description": "Modelo de Producto",
+                "required": [
+                    "name",
+                    "price",
+                    "sku"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "iPhone 15 Pro"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Teléfono inteligente de 128GB",
+                        "nullable": true
+                    },
+                    "sku": {
+                        "type": "string",
+                        "example": "PROD-12345"
+                    },
+                    "price": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 999.99
+                    },
+                    "stock": {
+                        "type": "integer",
+                        "example": 15
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-09-13T20:00:00.000000Z"
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "name": "Authorization",
+                "in": "header",
+                "bearerFormat": "JWT",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Órdenes",
+            "description": "Órdenes"
+        },
+        {
+            "name": "Pagos",
+            "description": "Pagos"
+        },
+        {
+            "name": "Productos",
+            "description": "Productos"
+        }
+    ]
+}
